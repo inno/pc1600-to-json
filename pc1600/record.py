@@ -101,10 +101,11 @@ class CC(Record):
         self.data[3] = fields["channel"]
         self.data[4] = fields["cc"]
         self.data[5] = fields["mode"]
-        i = 0
+        offset = 6
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, 6 + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def min(self):
@@ -135,8 +136,7 @@ class CC(Record):
 @dataclass
 class Master(Record):
     _type = 2
-    _name_length = 0
-    _name_offset = 0
+    _name_offset = 4
 
     def pack(self, fields: dict[str, ...]) -> None:
         self.data = Data(b"\x00" * 1000)  # Pre-pad with null
@@ -146,11 +146,21 @@ class Master(Record):
         data = short_to_bytes(val)
         self.data[1] = data[1]
         self.data[2] = data[0]
-        self.data = self.data.bytearray(0, 3 + 1)
+        self.data[3] = fields["wut"]
+        offset = 4
+        for i in range(self._name_length):
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def faders(self):
         return bitmap_ids(self.data[1], self.data[2])
+
+    # Seems to be "3" sometimes...?
+    @property
+    def wut(self):
+        return self.data[3]
 
 
 @dataclass
@@ -166,12 +176,14 @@ class String(Record):
         self.data[2:3] = struct.pack(">h", fields["min"])
         self.data[4:5] = struct.pack(">h", fields["max"])
         self.data[6] = len(sysex)
-        i = 0
+        offset = 7
         for i in range(self._sysex_length):
-            self.data[7 + i] = sysex[i]
+            self.data[offset] = sysex[i]
+            offset += 1
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, 7 + self._sysex_length + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def _name_offset(self):
@@ -207,10 +219,11 @@ class Mute(Record):
         self.data = Data(b"\x00" * 100)
         name = fields.get("name", "")
         self.data[0] = nibbles_to_int(len(name), self._type)
-        i = 0
+        offset = 1
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
 
 @dataclass
@@ -222,10 +235,11 @@ class Solo(Record):
         self.data = Data(b"\x00" * 100)
         name = fields.get("name", "")
         self.data[0] = nibbles_to_int(len(name), self._type)
-        i = 0
+        offset = 1
         for i in range(self._name_length):
             self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
 
 @dataclass
@@ -239,10 +253,11 @@ class ProgramChange(Record):
         self.data[0] = nibbles_to_int(len(name), self._type)
         self.data[1] = fields["channel"]
         self.data[2] = fields["program"]
-        i = 0
+        offset = 3
         for i in range(self._name_length):
             self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def channel(self):
@@ -265,10 +280,11 @@ class NoteOnOff(Record):
         self.data[1] = fields["channel"]
         self.data[2] = fields["note"]
         self.data[3] = fields["velocity"]
-        i = 0
+        offset = 4
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def channel(self):
@@ -293,11 +309,14 @@ class ButtonString(Record):
         sysex = bytes.fromhex(fields["sysex"])
         self.data[0] = nibbles_to_int(len(name), self._type)
         self.data[1] = len(sysex)
+        offset = 2
         for i in range(self._sysex_length):
-            self.data[2 + i] = sysex[i]
+            self.data[offset] = sysex[i]
+            offset += 1
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def _name_offset(self):
@@ -323,14 +342,18 @@ class StringPressRelease(Record):
         release = bytes.fromhex(fields["release"])
         self.data[0] = nibbles_to_int(len(name), self._type)
         self.data[1] = len(press)
+        offset = 3
         for i in range(self._press_length):
             self.data[2 + i] = press[i]
+            offset += 1
         self.data[self._release_offset - 1] = len(release)
         for i in range(self._release_length):
             self.data[self._release_offset + i] = release[i]
+            offset += 1
         for i in range(self._name_length):
             self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def _name_offset(self) -> int:
@@ -368,14 +391,19 @@ class StringToggle(Record):
         sysex2 = bytes.fromhex(fields["sysex2"])
         self.data[0] = nibbles_to_int(len(name), self._type)
         self.data[1] = len(sysex1)
+        offset = 2
         for i in range(self._sysex1_length):
-            self.data[2 + i] = sysex1[i]
-        self.data[self._sysex2_offset - 1] = len(sysex2)
+            self.data[offset] = sysex1[i]
+            offset += 1
+        self.data[offset] = len(sysex2)
+        offset += 1
         for i in range(self._sysex2_length):
-            self.data[self._sysex2_offset + i] = sysex2[i]
+            self.data[offset] = sysex2[i]
+            offset += 1
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def _sysex1_length(self) -> int:
@@ -411,10 +439,11 @@ class SendFader(Record):
         self.data = Data(b"\x00" * 100)
         name = fields.get("name", "")
         self.data[0] = nibbles_to_int(len(name), self._type)
-        i = 0
+        offset = 1
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
 
 @dataclass
@@ -427,10 +456,11 @@ class SendScene(Record):
         name = fields.get("name", "")
         self.data[0] = nibbles_to_int(len(name), self._type)
         self.data[1] = fields["value"]
-        i = 0
+        offset = 2
         for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-        self.data = self.data.bytearray(0, self._name_offset + i + 1)
+            self.data[offset] = ord(name[i])
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def value(self):
@@ -477,35 +507,41 @@ class Setup(Record):
         self.data = Data(b"\x00" * 32)  # Pre-pad with null
         name = fields.get("name", "")
         self.data[0] = nibbles_to_int(len(name), self._type)
-        offset = 3
+        offset = 1
         channels = fields.get("channels")
         if channels is not None:
             # midi channels
             val = sum([2 ** (int(v) - 1) for v in channels.keys()])
             data = short_to_bytes(val)
-            self.data[1] = data[1]
-            self.data[2] = data[0]
+            self.data[offset] = data[1]
+            self.data[offset + 1] = data[0]
+            offset += 2
 
             for chd in channels.values():
                 self.data[offset] = folded_reverse(chd["bank"])
                 self.data[offset + 1] = seven_bit_reverse(chd["program"])
                 self.data[offset + 2] = seven_bit_reverse(chd["volume"])
                 offset += 3
+        else:
+            offset += 2
 
         scene = fields.get("scene", None)
         if scene is not None:
-            self.data[self._scene_offset] = 0xfe
-            self.data[self._scene_offset + 1] = scene
+            self.data[offset] = 0xfe
+            self.data[offset + 1] = scene
             offset += 2
 
         sysex = fields["sysex"]
         if sysex is not None:
             sysex = bytes.fromhex(fields["sysex"])
-            self.data[self._sysex_offset] = len(sysex)
+            self.data[offset] = len(sysex)
+            offset += 1
             for i in range(len(sysex)):
-                self.data[self._sysex_offset + i + 1] = sysex[i]
-            offset += self._sysex_length
-        self.data = self.data.bytearray(0, offset + 1)
+                self.data[offset] = sysex[i]
+                offset += 1
+        else:
+            offset += 1
+        self.data = self.data.bytearray(0, offset)
 
     @property
     def _midi_channels(self):

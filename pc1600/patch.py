@@ -45,6 +45,10 @@ class Patch:
         return self.data.string(0, 16)
 
     @property
+    def channel(self) -> int:
+        return self.raw_data[5]
+
+    @property
     def data_size(self) -> int:
         return self.data.short(16)
 
@@ -100,6 +104,7 @@ class Patch:
             for record in records:
                 result[str(section)].append(record.to_dict())
         result["name"] = self.name.rstrip()
+        result["channel"] = self.channel
         result["file version"] = self.version
         return dict(result)
 

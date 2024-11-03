@@ -7,14 +7,22 @@ from pc1600 import Patch
 def main(
     syx_file: str,
     json_file: str,
+    debug: bool = False,
+    verbose: bool = False,
 ) -> None:
     json_path = Path(json_file)
-    if json_path.exists():
+    if json_path.is_file():
         print(f"ERROR: Output file '{json_path}' already exists!")
         exit()
     with Path(syx_file).open("rb") as f:
         data = f.read()
     patch = Patch(data)
+    if verbose:
+        for group, records in patch.records().items():
+            for record in records:
+                print(group, record)
+    if debug:
+        print(patch.rebundle())
     data = patch.to_json()
     with json_path.open("w") as f:
         f.write(data)

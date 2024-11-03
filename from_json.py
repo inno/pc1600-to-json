@@ -20,6 +20,7 @@ setup_records = {v.__name__: v for k, v in setup_types.items()}
 @dataclass
 class Patch:
     name: str
+    channel: int
     faders: list[dict[str, ...]]
     cvs: list[dict[str, ...]]
     buttons: list[dict[str, ...]]
@@ -72,9 +73,10 @@ class Patch:
 def main(
     json_file: str,
     syx_file: str,
+    debug: bool = False,
 ) -> None:
     syx_path = Path(syx_file)
-    if syx_path.exists():
+    if syx_path.is_file():
         print(f"ERROR: Output file '{syx_path}' already exists!")
         exit()
     with Path(json_file).open("r") as f:
@@ -83,6 +85,7 @@ def main(
     # file_version = data["file version"]
     patch = Patch(
         name=data["name"],
+        channel=data["channel"],
         faders=data["fader"],
         cvs=data["cv"],
         buttons=data["button"],
@@ -91,7 +94,9 @@ def main(
 
     )
     patch.process()
-    data = pack_sysex(patch.rebundle())
+    if debug:
+        print(patch.rebundle())
+    data = pack_sysex(patch.rebundle(), channel=patch.channel)
     with Path(syx_file).open("wb") as f:
         f.write(data)
     print(f"Wrote {len(data)} bytes to {syx_file}")
