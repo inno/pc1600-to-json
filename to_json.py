@@ -9,4 +9,3 @@ def main(filename: str) -> None:
         data = f.read()
     patch = Patch(data)
     print(patch.to_json())
-    print(patch.rebundle())
