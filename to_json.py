@@ -4,8 +4,18 @@ from pc1600 import Patch
 
 
 @simplecli.wrap
-def main(filename: str) -> None:
-    with Path(filename).open("rb") as f:
+def main(
+    syx_file: str,
+    json_file: str,
+) -> None:
+    json_path = Path(json_file)
+    if json_path.exists():
+        print(f"ERROR: Output file '{json_path}' already exists!")
+        exit()
+    with Path(syx_file).open("rb") as f:
         data = f.read()
     patch = Patch(data)
-    print(patch.to_json())
+    data = patch.to_json()
+    with json_path.open("w") as f:
+        f.write(data)
+    print(f"Wrote {len(data)} to {json_path}")
