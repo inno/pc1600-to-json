@@ -1,11 +1,11 @@
 import struct
 
 
-class Data(bytes):
+class Data(bytearray):
     def short(self, offset: int) -> int:
         return struct.unpack(">h", self[offset: offset + 2])[0]
 
-    def bytearray(self, offset: int, length: int) -> bytes:
+    def bytearray(self, offset: int, length: int) -> "Data":
         return Data(self[offset:offset + length])
 
     def string(self, offset: int, length: int) -> str:

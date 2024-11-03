@@ -106,7 +106,7 @@ class Patch:
     def to_json(self) -> str:
         class BytesToHexEncoder(json.JSONEncoder):
             def default(self, o):
-                if isinstance(o, bytes):
+                if isinstance(o, bytearray):
                     return o.hex()
                 return super().default(o)
 
