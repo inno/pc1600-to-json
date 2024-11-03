@@ -17,6 +17,7 @@ data_wheel_records = {v.__name__: v for k, v in data_wheel_types.items()}
 setup_records = {v.__name__: v for k, v in setup_types.items()}
 
 
+# XXX This was a PoC. Integrate this with pc1600.patch.Patch!
 @dataclass
 class Patch:
     name: str
