@@ -45,7 +45,7 @@ class Patch:
         return self.data.string(0, 16)
 
     @property
-    def channel(self) -> int:
+    def global_channel(self) -> int:
         return self.raw_data[5]
 
     @property
@@ -104,7 +104,7 @@ class Patch:
             for record in records:
                 result[str(section)].append(record.to_dict())
         result["name"] = self.name.rstrip()
-        result["channel"] = self.channel
+        result["global_channel"] = self.global_channel
         result["file version"] = self.version
         return dict(result)
 

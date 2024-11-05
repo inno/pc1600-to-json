@@ -21,7 +21,7 @@ setup_records = {v.__name__: v for k, v in setup_types.items()}
 @dataclass
 class Patch:
     name: str
-    channel: int
+    global_channel: int
     faders: list[dict[str, ...]]
     cvs: list[dict[str, ...]]
     buttons: list[dict[str, ...]]
@@ -86,7 +86,7 @@ def main(
     # file_version = data["file version"]
     patch = Patch(
         name=data["name"],
-        channel=data["channel"],
+        global_channel=data["global_channel"],
         faders=data["fader"],
         cvs=data["cv"],
         buttons=data["button"],
@@ -97,7 +97,7 @@ def main(
     patch.process()
     if debug:
         print(patch.rebundle())
-    data = pack_sysex(patch.rebundle(), channel=patch.channel)
+    data = pack_sysex(patch.rebundle(), global_channel=patch.global_channel)
     with Path(syx_file).open("wb") as f:
         f.write(data)
     print(f"Wrote {len(data)} bytes to {syx_file}")

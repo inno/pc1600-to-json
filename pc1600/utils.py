@@ -13,10 +13,10 @@ def short_to_bytes(b: int) -> bytes:
     return bytes([b >> 8, b & 0xff])
 
 
-def pack_sysex(data: Data, channel: int = 0) -> bytearray:
+def pack_sysex(data: Data, global_channel: int = 0) -> bytearray:
     # sysex header
     output = bytearray(b"\xf0\x00\x00\x1b\x0b")
-    output.append(channel)
+    output.append(global_channel)
     output.append(4)
     for x in data:
         output += int_to_nibbles(x)
