@@ -32,3 +32,7 @@ class Data(bytearray):
         for i in range(length):
             char = "" if self[i] < 32 or 126 < self[i] else chr(self[i])
             print(f"{i}:\t{self[i]}\t{hex(self[i])}\t{char}")
+
+    def replace(self, offset: int, value: str | bytes) -> int:
+        self[offset: offset + len(value)] = value
+        return len(value)

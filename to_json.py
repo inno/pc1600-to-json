@@ -18,9 +18,8 @@ def main(
         data = f.read()
     patch = Patch(data)
     if verbose:
-        for group, records in patch.records().items():
-            for record in records:
-                print(group, record)
+        for record in patch.records():
+            print(record.section, record)
     if debug:
         print(patch.rebundle())
     data = patch.to_json()

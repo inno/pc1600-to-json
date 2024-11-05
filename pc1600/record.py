@@ -9,6 +9,9 @@ from pc1600.utils import (
 )
 
 
+Fields = dict[str, int | str]
+
+
 @dataclass
 class Record:
     section: str
@@ -78,34 +81,40 @@ class Record:
     def type_and_name_length(self):
         return nibbles_to_int(self._type, len(self.name))
 
+    @classmethod
+    def _pack(cls, data: Data, length: int = 0, section: str = "") -> "Record":
+        if length == 0:
+            return cls(data=data, section=section)
+        return cls(data=data.bytearray(0, length), section=section)
+
 
 @dataclass
 class Disabled(Record):
     _type = 0
     _name_offset = 0
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00")
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "Disabled":
+        return cls(data=Data(b"\x00"), section=section)
 
 
 @dataclass
 class CC(Record):
     _type = 1
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 32)  # Pre-pad with null
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "CC":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = fields["min"]
-        self.data[2] = fields["max"]
-        self.data[3] = fields["channel"]
-        self.data[4] = fields["cc"]
-        self.data[5] = fields["mode"]
-        offset = 6
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            fields["min"],
+            fields["max"],
+            fields["channel"],
+            fields["cc"],
+            fields["mode"],
+        ])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def min(self):
@@ -138,20 +147,19 @@ class Master(Record):
     _type = 2
     _name_offset = 4
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 1000)  # Pre-pad with null
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "Master":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
         val = sum([2 ** (v - 1) for v in fields["faders"]])
-        data = short_to_bytes(val)
-        self.data[1] = data[1]
-        self.data[2] = data[0]
-        self.data[3] = fields["wut"]
-        offset = 4
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        val_data = short_to_bytes(val)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            val_data[1],
+            val_data[0],
+            fields["wut"],
+        ])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def faders(self):
@@ -167,23 +175,20 @@ class Master(Record):
 class String(Record):
     _type = 3
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 1000)  # Pre-pad with null
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "String":
         name = fields.get("name", "")
         sysex = bytes.fromhex(fields["sysex"])
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = param_format_inversion[fields["param_format"]]
-        self.data[2:3] = struct.pack(">h", fields["min"])
-        self.data[4:5] = struct.pack(">h", fields["max"])
-        self.data[6] = len(sysex)
-        offset = 7
-        for i in range(self._sysex_length):
-            self.data[offset] = sysex[i]
-            offset += 1
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            param_format_inversion[fields["param_format"]],
+        ])
+        data.extend(struct.pack(">h", fields["min"]))
+        data.extend(struct.pack(">h", fields["max"]))
+        data.extend([len(sysex)])
+        data.extend(sysex)
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def _name_offset(self):
@@ -215,15 +220,12 @@ class Mute(Record):
     _type = 1
     _name_offset = 1
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 100)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "Mute":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        offset = 1
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([nibbles_to_int(len(name), cls._type)])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
 
 @dataclass
@@ -231,15 +233,14 @@ class Solo(Record):
     _type = 2
     _name_offset = 1
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 100)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "Solo":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        offset = 1
-        for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+        ])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
 
 @dataclass
@@ -247,17 +248,16 @@ class ProgramChange(Record):
     _type = 3
     _name_offset = 3
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 100)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "Solo":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = fields["channel"]
-        self.data[2] = fields["program"]
-        offset = 3
-        for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            fields["channel"],
+            fields["program"],
+        ])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def channel(self):
@@ -273,18 +273,17 @@ class NoteOnOff(Record):
     _type = 4
     _name_offset = 4
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 100)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "NoteOnOff":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = fields["channel"]
-        self.data[2] = fields["note"]
-        self.data[3] = fields["velocity"]
-        offset = 4
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            fields["channel"],
+            fields["note"],
+            fields["velocity"],
+        ])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def channel(self):
@@ -303,20 +302,17 @@ class NoteOnOff(Record):
 class ButtonString(Record):
     _type = 5
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 1000)  # Pre-pad with null
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "ButtonString":
         name = fields.get("name", "")
         sysex = bytes.fromhex(fields["sysex"])
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = len(sysex)
-        offset = 2
-        for i in range(self._sysex_length):
-            self.data[offset] = sysex[i]
-            offset += 1
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            len(sysex),
+        ])
+        data.extend(sysex)
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def _name_offset(self):
@@ -335,25 +331,20 @@ class ButtonString(Record):
 class StringPressRelease(Record):
     _type = 6
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 1000)  # Pre-pad with null
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "StringPressRelease":
         name = fields.get("name", "")
         press = bytes.fromhex(fields["press"])
         release = bytes.fromhex(fields["release"])
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = len(press)
-        offset = 3
-        for i in range(self._press_length):
-            self.data[2 + i] = press[i]
-            offset += 1
-        self.data[self._release_offset - 1] = len(release)
-        for i in range(self._release_length):
-            self.data[self._release_offset + i] = release[i]
-            offset += 1
-        for i in range(self._name_length):
-            self.data[self._name_offset + i] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            len(press),
+        ])
+        data.extend(press)
+        data.extend([len(release)])
+        data.extend(release)
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def _name_offset(self) -> int:
@@ -384,26 +375,20 @@ class StringPressRelease(Record):
 class StringToggle(Record):
     _type = 7
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 1000)  # Pre-pad with null
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "StringToggle":
         name = fields.get("name", "")
         sysex1 = bytes.fromhex(fields["sysex1"])
         sysex2 = bytes.fromhex(fields["sysex2"])
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = len(sysex1)
-        offset = 2
-        for i in range(self._sysex1_length):
-            self.data[offset] = sysex1[i]
-            offset += 1
-        self.data[offset] = len(sysex2)
-        offset += 1
-        for i in range(self._sysex2_length):
-            self.data[offset] = sysex2[i]
-            offset += 1
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            len(sysex1),
+        ])
+        data.extend(sysex1)
+        data.extend([len(sysex2)])
+        data.extend(sysex2)
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def _sysex1_length(self) -> int:
@@ -435,15 +420,12 @@ class SendFader(Record):
     _type = 8
     _name_offset = 1
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 100)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "SendFader":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        offset = 1
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([nibbles_to_int(len(name), cls._type)])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
 
 @dataclass
@@ -451,16 +433,15 @@ class SendScene(Record):
     _type = 9
     _name_offset = 1
 
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 100)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "SendScene":
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        self.data[1] = fields["value"]
-        offset = 2
-        for i in range(self._name_length):
-            self.data[offset] = ord(name[i])
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+        data = Data([
+            nibbles_to_int(len(name), cls._type),
+            fields["value"],
+        ])
+        data.extend(name.encode())
+        return cls(data=data, section=section)
 
     @property
     def value(self):
@@ -472,22 +453,18 @@ class DataWheel(Record):
     _type = 1
     _name_offset = 0
 
-    def __post_init__(self) -> None:
-        self._wheel_lookup = {i: f"Fader {i+1}" for i in range(16)}
-        self._wheel_lookup[16] = "CV 1"
-        self._wheel_lookup[17] = "CV 2"
-        self._wheel_lookup[18] = "Last fader"
-
-    def pack(self, fields: dict[str, ...]) -> None:
-        self.data = Data(b"\x00" * 4)  # Pre-pad with null
-        wheel_reverse = {v: k for k, v in self._wheel_lookup.items()}
-        self.data[0] = nibbles_to_int(0, self._type)
-        self.data[1] = wheel_reverse[fields["mapped_to"]]
-        self.data = self.data.bytearray(0, 2)
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "DataWheel":
+        wheel_reverse = {v: k for k, v in wheel_lookup.items()}
+        data = Data([
+            nibbles_to_int(0, cls._type),
+            wheel_reverse[fields["mapped_to"]],
+        ])
+        return cls(data=data, section=section)
 
     @property
     def mapped_to(self):
-        return self._wheel_lookup[self.data[1]]
+        return wheel_lookup[self.data[1]]
 
 
 @dataclass
@@ -495,7 +472,8 @@ class Setup(Record):
     _type = 1
     _name_offset = 0
 
-    def pack(self, fields: dict[str, ...]) -> None:
+    @classmethod
+    def pack(cls, fields: Fields, section: str) -> "Setup":
         def seven_bit_reverse(value: str | int) -> int:
             return 0x7f if value == "Off" else value + 0x80
 
@@ -504,44 +482,36 @@ class Setup(Record):
                 return int(value[:-1]) - 1
             return value + 0x80
 
-        self.data = Data(b"\x00" * 32)  # Pre-pad with null
         name = fields.get("name", "")
-        self.data[0] = nibbles_to_int(len(name), self._type)
-        offset = 1
+        data = Data([nibbles_to_int(len(name), cls._type)])
         channels = fields.get("channels")
         if channels is not None:
             # midi channels
             val = sum([2 ** (int(v) - 1) for v in channels.keys()])
-            data = short_to_bytes(val)
-            self.data[offset] = data[1]
-            self.data[offset + 1] = data[0]
-            offset += 2
+            val_data = short_to_bytes(val)
+            data.extend([val_data[1], val_data[0]])
 
             for chd in channels.values():
-                self.data[offset] = folded_reverse(chd["bank"])
-                self.data[offset + 1] = seven_bit_reverse(chd["program"])
-                self.data[offset + 2] = seven_bit_reverse(chd["volume"])
-                offset += 3
+                data.extend([
+                    folded_reverse(chd["bank"]),
+                    seven_bit_reverse(chd["program"]),
+                    seven_bit_reverse(chd["volume"]),
+                ])
         else:
-            offset += 2
+            data.extend([0x00, 0x00])
 
         scene = fields.get("scene", None)
         if scene is not None:
-            self.data[offset] = 0xfe
-            self.data[offset + 1] = scene
-            offset += 2
+            data.extend([0xfe, scene])
 
         sysex = fields["sysex"]
         if sysex is not None:
             sysex = bytes.fromhex(fields["sysex"])
-            self.data[offset] = len(sysex)
-            offset += 1
-            for i in range(len(sysex)):
-                self.data[offset] = sysex[i]
-                offset += 1
+            data.extend([len(sysex)])
+            data.extend(sysex)
         else:
-            offset += 1
-        self.data = self.data.bytearray(0, offset)
+            data.extend([0x00])
+        return cls._pack(data=data, section=section)
 
     @property
     def _midi_channels(self):
@@ -647,3 +617,10 @@ param_format_lookup = {
 }
 
 param_format_inversion = {v: k for k, v in param_format_lookup.items()}
+
+wheel_lookup = {i: f"Fader {i+1}" for i in range(16)}
+wheel_lookup[16] = "CV 1"
+wheel_lookup[17] = "CV 2"
+wheel_lookup[18] = "Last fader"
+
+

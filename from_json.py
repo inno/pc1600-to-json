@@ -8,7 +8,7 @@ from pc1600.record import (
     setup_types,
     data_wheel_types,
 )
-from pc1600.patch import Section
+from pc1600.patch import Patch, Section
 from pc1600.utils import short_to_bytes, pack_sysex
 
 button_records = {v.__name__: v for k, v in button_types.items()}
@@ -18,56 +18,44 @@ setup_records = {v.__name__: v for k, v in setup_types.items()}
 
 
 # XXX This was a PoC. Integrate this with pc1600.patch.Patch!
-@dataclass
-class Patch:
-    name: str
-    global_channel: int
-    faders: list[dict[str, ...]]
-    cvs: list[dict[str, ...]]
-    buttons: list[dict[str, ...]]
-    data_wheel: list[dict[str, ...]]
-    setup: list[dict[str, ...]]
-    records: list[...] = None
+def pack_patch(
+    name: str,
+    global_channel: int,
+    faders: list[dict[str, ...]],
+    cvs: list[dict[str, ...]],
+    buttons: list[dict[str, ...]],
+    data_wheel: list[dict[str, ...]],
+    setup: list[dict[str, ...]],
+):
+    records = []
+    for fader in faders:
+        record = fader_records[fader["type"]]
+        records.append(record.pack(fader, Section.FADER))
 
-    def process(self):
-        self.records = []
-        for fader in self.faders:
-            func = fader_records[fader["type"]]
-            record = func(section=Section.FADER, data=b"")
-            record.pack(fader)
-            self.records.append(record)
+    for cv in cvs:
+        record = fader_records[cv["type"]]
+        records.append(record.pack(cv, Section.CV))
 
-        for cv in self.cvs:
-            func = fader_records[cv["type"]]
-            record = func(section=Section.CV, data=b"")
-            record.pack(cv)
-            self.records.append(record)
+    for button in buttons:
+        record = button_records[button["type"]]
+        records.append(record.pack(button, Section.BUTTON))
 
-        for button in self.buttons:
-            func = button_records[button["type"]]
-            record = func(section=Section.BUTTON, data=b"")
-            record.pack(button)
-            self.records.append(record)
+    for wheel in data_wheel:
+        record = data_wheel_records[wheel["type"]]
+        records.append(record.pack(wheel, Section.DATA_WHEEL))
 
-        for wheel in self.data_wheel:
-            func = data_wheel_records[wheel["type"]]
-            record = func(section=Section.DATA_WHEEL, data=b"")
-            record.pack(wheel)
-            self.records.append(record)
+    for setup in setup:
+        record = setup_records[setup["type"]]
+        records.append(record.pack(setup, Section.SETUP))
 
-        for setup in self.setup:
-            func = setup_records[setup["type"]]
-            record = func(section=Section.SETUP, data=b"")
-            record.pack(setup)
-            self.records.append(record)
-
-    def rebundle(self) -> bytes:
-        raw = b"".join([r.rebundle() for r in self.records])
-        return (
-            bytes(self.name.encode()).ljust(16)
-            + short_to_bytes(len(raw))
-            + raw
-        )
+    raw = b"".join([r.rebundle() for r in records])
+    unpacked = (
+        bytes(name.encode()).ljust(16)
+        + short_to_bytes(len(raw))
+        + raw
+    )
+    packed = pack_sysex(unpacked, global_channel=global_channel)
+    return Patch(packed)
 
 
 @simplecli.wrap
@@ -84,7 +72,7 @@ def main(
         data = json.load(f)
 
     # file_version = data["file version"]
-    patch = Patch(
+    patch = pack_patch(
         name=data["name"],
         global_channel=data["global_channel"],
         faders=data["fader"],
@@ -92,12 +80,8 @@ def main(
         buttons=data["button"],
         data_wheel=data["data wheel"],
         setup=data["setup"],
-
     )
-    patch.process()
-    if debug:
-        print(patch.rebundle())
-    data = pack_sysex(patch.rebundle(), global_channel=patch.global_channel)
+    data = patch.to_syx()
     with Path(syx_file).open("wb") as f:
         f.write(data)
     print(f"Wrote {len(data)} bytes to {syx_file}")
