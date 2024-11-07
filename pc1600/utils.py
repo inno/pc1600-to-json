@@ -28,7 +28,7 @@ def pack_sysex(data: Data, global_channel: int = 0) -> bytearray:
 def unpack_sysex(data: bytes):
     # sysex header
     if data[0:5] != b"\xf0\x00\x00\x1b\x0b":
-        print(f"ERROR: Invalid fingerprint! [{data[0:5]}]")
+        print(f"ERROR: Invalid fingerprint! [{data[0:5].decode()}]")
         exit()
     # data[5] == midi channel
     if data[6] == 0x01:  # All presets

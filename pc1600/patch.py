@@ -22,10 +22,10 @@ __version__ = "1.0.0"
 
 
 class Section(enum.StrEnum):
-    BUTTON = enum.auto()
-    CV = enum.auto()
-    DATA_WHEEL = "data wheel"
-    FADER = enum.auto()
+    BUTTONS = enum.auto()
+    CVS = enum.auto()
+    DATA_WHEEL = enum.auto()
+    FADERS = enum.auto()
     SETUP = enum.auto()
 
 
@@ -67,13 +67,13 @@ class Patch:
     def parse_records(self) -> None:
         self._records = []
         record_offset = 18
-        current_section = Section.FADER
+        current_section = Section.FADERS
         record_id = 1
         while True:
             if record_id == 17:
-                current_section = Section.CV
+                current_section = Section.CVS
             elif record_id == 19:
-                current_section = Section.BUTTON
+                current_section = Section.BUTTONS
             elif record_id == 35:
                 current_section = Section.DATA_WHEEL
             elif record_id == 36:
@@ -103,7 +103,7 @@ class Patch:
             result[record.section].append(record.to_dict())
         result["name"] = self.name.rstrip()
         result["global_channel"] = self.global_channel
-        result["file version"] = self.version
+        result["file_version"] = self.version
         return dict(result)
 
     def to_json(self) -> str:
@@ -123,14 +123,14 @@ class Patch:
         offset: int,
         section: Section,
     ) -> Record:
-        section_str = str(section)
+        section = str(section)
         data = self.data.bytearray(offset, self.data[offset - 1])
         record_type = int_to_nibbles(data[0])[1]
-        if section in (Section.FADER, Section.CV):
-            return fader_types[record_type](data=data, section=section_str)
-        elif section == Section.BUTTON:
-            return button_types[record_type](data=data, section=section_str)
+        if section in (Section.FADERS, Section.CVS):
+            return fader_types[record_type](section, data)
+        elif section == Section.BUTTONS:
+            return button_types[record_type](section, data)
         elif section == Section.DATA_WHEEL:
-            return data_wheel_types[record_type](data=data, section=section_str)
+            return data_wheel_types[record_type](section, data)
         elif section == Section.SETUP:
-            return setup_types[record_type](data=data, section=section_str)
+            return setup_types[record_type](section, data)

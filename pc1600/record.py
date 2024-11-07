@@ -600,6 +600,11 @@ setup_types = {
     1: Setup,
 }
 
+name_to_fader_id = {v.__name__: v for k, v in fader_types.items()}
+name_to_button_id = {v.__name__: v for k, v in button_types.items()}
+name_to_data_wheel_id = {v.__name__: v for k, v in data_wheel_types.items()}
+name_to_setup_id = {v.__name__: v for k, v in setup_types.items()}
+
 param_format_lookup = {
     1: "Single byte",
     2: "2Byte,7Bits,hi->lo",
