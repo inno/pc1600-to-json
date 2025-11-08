@@ -7,6 +7,7 @@ from pc1600.utils import (
     nibbles_to_int,
     short_to_bytes,
 )
+from typing import ClassVar
 
 
 Fields = dict[str, int | str]
@@ -16,8 +17,9 @@ Fields = dict[str, int | str]
 class Record:
     section: str
     data: Data
+    _type: ClassVar[int] = -1
 
-    def __str__(self):
+    def __str__(self) -> str:
         properties = []
         for prop in dir(self):
             if prop.startswith("_"):
@@ -34,7 +36,7 @@ class Record:
             properties.append(f"{prop}={value}")
         return f"{type(self).__name__}({', '.join(properties)})"
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, str ]:
         result = {}
         for prop in dir(self):
             if prop in self.fields():
@@ -67,18 +69,14 @@ class Record:
     def _name_offset(self) -> int:
         return 6 if self._name_length else 0
 
-    def length(self):
+    def length(self) -> int:
         return len(self.data)
 
-    def rebundle(self):
+    def rebundle(self) -> bytes:
         return bytes([self.length()]) + self.data[:self.length()]
 
     @property
-    def _type(self):
-        raise Exception("'type' must be defined in this class!")
-
-    @property
-    def type_and_name_length(self):
+    def type_and_name_length(self) -> int:
         return nibbles_to_int(self._type, len(self.name))
 
     @classmethod
@@ -90,8 +88,11 @@ class Record:
 
 @dataclass
 class Disabled(Record):
-    _type = 0
-    _name_offset = 0
+    _type: ClassVar[int] = 0
+
+    @property
+    def _name_offset(self) -> int:
+        return 0
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "Disabled":
@@ -100,7 +101,7 @@ class Disabled(Record):
 
 @dataclass
 class CC(Record):
-    _type = 1
+    _type: ClassVar[int] = 1
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "CC":
@@ -117,11 +118,11 @@ class CC(Record):
         return cls(data=data, section=section)
 
     @property
-    def min(self):
+    def min(self) -> int:
         return self.data[1]
 
     @property
-    def max(self):
+    def max(self) -> int:
         return self.data[2]
 
     # gc = global channel (0xFE?)
@@ -130,22 +131,25 @@ class CC(Record):
     # rv = remote velocity (0xFF)
 
     @property
-    def channel(self):
+    def channel(self) -> int:
         return self.data[3]
 
     @property
-    def cc(self):
+    def cc(self) -> int:
         return self.data[4]
 
     @property
-    def mode(self):
+    def mode(self) -> int:
         return self.data[5]
 
 
 @dataclass
 class Master(Record):
-    _type = 2
-    _name_offset = 4
+    _type: ClassVar[int] = 2
+
+    @property
+    def _name_offset(self) -> int:
+        return 4
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "Master":
@@ -162,18 +166,18 @@ class Master(Record):
         return cls(data=data, section=section)
 
     @property
-    def faders(self):
+    def faders(self) -> list[int]:
         return bitmap_ids(self.data[1], self.data[2])
 
     # Seems to be "3" sometimes...?
     @property
-    def wut(self):
+    def wut(self) -> int:
         return self.data[3]
 
 
 @dataclass
 class String(Record):
-    _type = 3
+    _type: ClassVar[int] = 3
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "String":
@@ -191,11 +195,11 @@ class String(Record):
         return cls(data=data, section=section)
 
     @property
-    def _name_offset(self):
+    def _name_offset(self) -> int:
         return 7 + self._sysex_length
 
     @property
-    def param_format(self):
+    def param_format(self) -> str:
         return param_format_lookup[self.data[1]]
 
     @property
@@ -217,8 +221,11 @@ class String(Record):
 
 @dataclass
 class Mute(Record):
-    _type = 1
-    _name_offset = 1
+    _type: ClassVar[int] = 1
+
+    @property
+    def _name_offset(self) -> int:
+        return 1
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "Mute":
@@ -230,8 +237,11 @@ class Mute(Record):
 
 @dataclass
 class Solo(Record):
-    _type = 2
-    _name_offset = 1
+    _type: ClassVar[int] = 2
+
+    @property
+    def _name_offset(self) -> int:
+        return 1
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "Solo":
@@ -245,8 +255,11 @@ class Solo(Record):
 
 @dataclass
 class ProgramChange(Record):
-    _type = 3
-    _name_offset = 3
+    _type: ClassVar[int] = 3
+
+    @property
+    def _name_offset(self) -> int:
+        return 3
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "Solo":
@@ -260,18 +273,21 @@ class ProgramChange(Record):
         return cls(data=data, section=section)
 
     @property
-    def channel(self):
+    def channel(self) -> int:
         return self.data[1]
 
     @property
-    def program(self):
+    def program(self) -> int:
         return self.data[2]
 
 
 @dataclass
 class NoteOnOff(Record):
-    _type = 4
-    _name_offset = 4
+    _type: ClassVar[int] = 4
+
+    @property
+    def _name_offset(self) -> int:
+        return 4
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "NoteOnOff":
@@ -286,21 +302,21 @@ class NoteOnOff(Record):
         return cls(data=data, section=section)
 
     @property
-    def channel(self):
+    def channel(self) -> int:
         return self.data[1]
 
     @property
-    def note(self):
+    def note(self) -> int:
         return self.data[2]
 
     @property
-    def velocity(self):
+    def velocity(self) -> int:
         return self.data[3]
 
 
 @dataclass
 class ButtonString(Record):
-    _type = 5
+    _type: ClassVar[int] = 5
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "ButtonString":
@@ -315,7 +331,7 @@ class ButtonString(Record):
         return cls(data=data, section=section)
 
     @property
-    def _name_offset(self):
+    def _name_offset(self) -> int:
         return 2 + self._sysex_length
 
     @property
@@ -329,7 +345,7 @@ class ButtonString(Record):
 
 @dataclass
 class StringPressRelease(Record):
-    _type = 6
+    _type: ClassVar[int] = 6
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "StringPressRelease":
@@ -373,7 +389,7 @@ class StringPressRelease(Record):
 
 @dataclass
 class StringToggle(Record):
-    _type = 7
+    _type: ClassVar[int] = 7
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "StringToggle":
@@ -417,8 +433,11 @@ class StringToggle(Record):
 
 @dataclass
 class SendFader(Record):
-    _type = 8
-    _name_offset = 1
+    _type: ClassVar[int] = 8
+
+    @property
+    def _name_offset(self) -> int:
+        return 1
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "SendFader":
@@ -430,8 +449,11 @@ class SendFader(Record):
 
 @dataclass
 class SendScene(Record):
-    _type = 9
-    _name_offset = 1
+    _type: ClassVar[int] = 9
+
+    @property
+    def _name_offset(self) -> int:
+        return 1
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "SendScene":
@@ -444,14 +466,17 @@ class SendScene(Record):
         return cls(data=data, section=section)
 
     @property
-    def value(self):
+    def value(self) -> int:
         return self.data[1]
 
 
 @dataclass
 class DataWheel(Record):
-    _type = 1
-    _name_offset = 0
+    _type: ClassVar[int] = 1
+
+    @property
+    def _name_offset(self) -> int:
+        return 0
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "DataWheel":
@@ -463,14 +488,17 @@ class DataWheel(Record):
         return cls(data=data, section=section)
 
     @property
-    def mapped_to(self):
+    def mapped_to(self) -> str:
         return wheel_lookup[self.data[1]]
 
 
 @dataclass
 class Setup(Record):
-    _type = 1
-    _name_offset = 0
+    _type: int = 1
+
+    @property
+    def _name_offset(self) -> int:
+        return 0
 
     @classmethod
     def pack(cls, fields: Fields, section: str) -> "Setup":
@@ -514,11 +542,11 @@ class Setup(Record):
         return cls._pack(data=data, section=section)
 
     @property
-    def _midi_channels(self):
+    def _midi_channels(self) -> list[int]:
         return bitmap_ids(self.data[1], self.data[2])
 
     @property
-    def channels(self):
+    def channels(self) -> dict[int, dict[str, str | int]]:
         def seven_bit(value) -> str | int:
             return value - 0x80 if value & 0x80 else "Off"
 
