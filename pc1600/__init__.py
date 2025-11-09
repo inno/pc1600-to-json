@@ -1,13 +1,13 @@
-from pc1600.data import Data
+from pc1600.data import Data, data_factory, pack_sysex, unpack_sysex
 from pc1600.patch import Patch, Section
 from pc1600.record import (
     Record,
-    name_to_fader_id,
     name_to_button_id,
     name_to_data_wheel_id,
+    name_to_fader_id,
     name_to_setup_id,
 )
-from pc1600.utils import pack_sysex, short_to_bytes, unpack_sysex
+from pc1600.utils import short_to_bytes
 
 
 def json_to_patch(
@@ -21,6 +21,10 @@ def json_to_patch(
     setup: list[Record],
     verbose: bool = False,
 ) -> Patch:
+    if file_version != "1.0.0":
+        msg = f"Unsupported file version: {file_version}"
+        raise ValueError(msg)
+
     sections = [
         (Section.FADERS, name_to_fader_id, faders),
         (Section.CVS, name_to_fader_id, cvs),
@@ -36,9 +40,11 @@ def json_to_patch(
             if verbose:
                 print(record)
             raw += record.rebundle()
-    unpacked = bytes(name.encode()).ljust(16)
-    unpacked += short_to_bytes(len(raw))
-    unpacked += raw
+    unpacked = data_factory(
+        bytes(name.encode()).ljust(16),
+        short_to_bytes(len(raw)),
+        raw,
+    )
     if verbose:
         print("UNPACKED:", unpacked)
     packed = pack_sysex(unpacked, global_channel=global_channel)

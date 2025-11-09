@@ -1,7 +1,7 @@
 import enum
 import json
 from dataclasses import dataclass, field
-from collections import defaultdict
+from pc1600.data import Data, pack_sysex, unpack_sysex
 from pc1600.record import (
     Record,
     button_types,
@@ -9,14 +9,8 @@ from pc1600.record import (
     fader_types,
     setup_types,
 )
-from pc1600.data import Data
-from pc1600.utils import (
-    int_to_nibbles,
-    pack_sysex,
-    short_to_bytes,
-    unpack_sysex,
-)
-
+from pc1600.utils import int_to_nibbles, short_to_bytes
+from typing import Any, TypedDict
 
 __version__ = "1.0.0"
 
@@ -29,18 +23,42 @@ class Section(enum.StrEnum):
     SETUP = enum.auto()
 
 
+class JSONFileStructure(TypedDict):
+    name: str
+    global_channel: int
+    file_version: str
+    buttons: list[dict[str, Any]]
+    cvs: list[dict[str, Any]]
+    data_wheel: list[dict[str, Any]]
+    faders: list[dict[str, Any]]
+    setup: list[dict[str, Any]]
+
+
+def extract_sections(records: list[Record]) -> dict[str, list[Record]]:
+    sections: dict[str, list[Record]] = {
+        Section.BUTTONS: [],
+        Section.CVS: [],
+        Section.DATA_WHEEL: [],
+        Section.FADERS: [],
+        Section.SETUP: [],
+    }
+    for record in records:
+        sections[record.section].append(record)
+    return sections
+
+
 @dataclass
 class Patch:
     raw_data: bytes
-    data: None | Data = None
+    data: Data = field(default_factory=Data)
     _records: list[Record] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.data = unpack_sysex(self.raw_data)
         # Exclude name and size fields
         if len(self.data) - (16 + 2) != self.data_size:
-            print("ERROR: Data length != size field!")
-            exit()
+            msg = "Data length != size field!"
+            raise ValueError(msg)
         self.parse_records()
 
     @property
@@ -95,20 +113,23 @@ class Patch:
         data_length = short_to_bytes(len(raw))
         return name + data_length + raw
 
-    def to_dict(self) -> dict[str, list[dict[str, ...]]]:
-        result = defaultdict(defaultdict(list).copy)
-        for record in self.records():
-            if record.section not in result:
-                result[record.section] = []
-            result[record.section].append(record.to_dict())
-        result["name"] = self.name.rstrip()
-        result["global_channel"] = self.global_channel
-        result["file_version"] = self.version
-        return dict(result)
+    def to_dict(self) -> JSONFileStructure:
+        records = self.records()
+        sections = extract_sections(records)
+        return JSONFileStructure(
+            name=self.name.rstrip(),
+            global_channel=self.global_channel,
+            file_version=self.version,
+            buttons=[r.to_dict() for r in sections[Section.BUTTONS]],
+            cvs=[r.to_dict() for r in sections[Section.CVS]],
+            data_wheel=[r.to_dict() for r in sections[Section.DATA_WHEEL]],
+            faders=[r.to_dict() for r in sections[Section.FADERS]],
+            setup=[r.to_dict() for r in sections[Section.SETUP]],
+        )
 
     def to_json(self) -> str:
         class BytesToHexEncoder(json.JSONEncoder):
-            def default(self, o):
+            def default(self, o: Any) -> Any:  # noqa: ANN401
                 if isinstance(o, bytearray):
                     return o.hex()
                 return super().default(o)
@@ -123,14 +144,14 @@ class Patch:
         offset: int,
         section: Section,
     ) -> Record:
-        section = str(section)
         data = self.data.bytearray(offset, self.data[offset - 1])
         record_type = int_to_nibbles(data[0])[1]
         if section in (Section.FADERS, Section.CVS):
             return fader_types[record_type](section, data)
-        elif section == Section.BUTTONS:
+        if section == Section.BUTTONS:
             return button_types[record_type](section, data)
-        elif section == Section.DATA_WHEEL:
+        if section == Section.DATA_WHEEL:
             return data_wheel_types[record_type](section, data)
-        elif section == Section.SETUP:
+        if section == Section.SETUP:
             return setup_types[record_type](section, data)
+        raise ValueError("Unknown section: " + section)
