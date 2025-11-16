@@ -30,7 +30,7 @@ def main(
     patch_request = mido.Message(
         "sysex",
         data=[0, 0, 0x1b, 0x0b, channel - 1, 0x14],
-    )
+    )  # fmt: skip
     inp = mido.open_input(input_device)
     outp = mido.open_output(output_device)
     outp.send(patch_request)

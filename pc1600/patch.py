@@ -1,15 +1,26 @@
+from __future__ import annotations
+
 import enum
 import json
 from dataclasses import dataclass, field
-from pc1600.data import Data, pack_sysex, unpack_sysex
+from pc1600.data import Data
 from pc1600.record import (
     Record,
     button_types,
     data_wheel_types,
     fader_types,
     setup_types,
+    name_to_button_id,
+    name_to_data_wheel_id,
+    name_to_fader_id,
+    name_to_setup_id,
 )
-from pc1600.utils import int_to_nibbles, short_to_bytes
+from pc1600.utils import (
+    int_to_nibbles,
+    pack_sysex,
+    short_to_bytes,
+    unpack_sysex,
+)
 from typing import Any, TypedDict
 
 __version__ = "1.0.0"
@@ -34,27 +45,42 @@ class JSONFileStructure(TypedDict):
     setup: list[dict[str, Any]]
 
 
+section_lookup = {
+    Section.FADERS: name_to_fader_id,
+    Section.CVS: name_to_fader_id,
+    Section.BUTTONS: name_to_button_id,
+    Section.DATA_WHEEL: name_to_data_wheel_id,
+    Section.SETUP: name_to_setup_id,
+}
+
+
 def extract_sections(records: list[Record]) -> dict[str, list[Record]]:
-    sections: dict[str, list[Record]] = {
-        Section.BUTTONS: [],
-        Section.CVS: [],
-        Section.DATA_WHEEL: [],
-        Section.FADERS: [],
-        Section.SETUP: [],
+    return {
+        section: [r for r in records if r.section == section]
+        for section in section_lookup
     }
-    for record in records:
-        sections[record.section].append(record)
-    return sections
+
+
+def flatten_section(
+    section: Section,
+    items: list[dict[str, int | str]],
+) -> bytes:
+    raw = b""
+    for item in items:
+        section_data = section_lookup[section][str(item["type"])]
+        record = section_data.pack(section, **item)
+        raw += record.flatten()
+    return raw
 
 
 @dataclass
-class Patch:
+class SysexPatch:
     raw_data: bytes
     data: Data = field(default_factory=Data)
     _records: list[Record] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        self.data = unpack_sysex(self.raw_data)
+        self.data = Data(unpack_sysex(self.raw_data))
         # Exclude name and size fields
         if len(self.data) - (16 + 2) != self.data_size:
             msg = "Data length != size field!"
@@ -107,8 +133,8 @@ class Patch:
                 break
             record_id += 1
 
-    def rebundle(self) -> bytes:
-        raw = b"".join([r.rebundle() for r in self.records()])
+    def flatten(self) -> bytes:
+        raw = b"".join([r.flatten() for r in self.records()])
         name = bytes(self.name.encode()).ljust(16)
         data_length = short_to_bytes(len(raw))
         return name + data_length + raw
@@ -136,8 +162,8 @@ class Patch:
 
         return json.dumps(self.to_dict(), indent=4, cls=BytesToHexEncoder)
 
-    def to_syx(self) -> bytes:
-        return pack_sysex(self.rebundle(), self.global_channel)
+    def to_raw_sysex(self) -> bytes:
+        return pack_sysex(self.flatten(), self.global_channel)
 
     def record_factory(
         self,

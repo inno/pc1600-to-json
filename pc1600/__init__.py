@@ -1,51 +1,47 @@
-from pc1600.data import Data, data_factory, pack_sysex, unpack_sysex
-from pc1600.patch import Patch, Section
-from pc1600.record import (
-    Record,
-    name_to_button_id,
-    name_to_data_wheel_id,
-    name_to_fader_id,
-    name_to_setup_id,
-)
-from pc1600.utils import short_to_bytes
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from pc1600.data import data_factory
+from pc1600.patch import SysexPatch, Section, flatten_section
+from pc1600.utils import short_to_bytes, pack_sysex
 
 
-def json_to_patch(
-    buttons: list[Record],
-    cvs: list[Record],
-    data_wheel: list[Record],
-    faders: list[Record],
+def sysex_file_to_sysex_patch(sysex_file: str) -> SysexPatch:
+    with Path(sysex_file).open("rb") as f:
+        return SysexPatch(f.read())
+
+
+def json_file_to_sysex_patch(json_file: str) -> SysexPatch:
+    with Path(json_file).open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    return sections_to_sysex_patch(**data)
+
+
+def raw_to_sysex(name: str, global_channel: int, raw: bytes) -> bytearray:
+    padded_name = bytes(name.encode()).ljust(16)
+    raw_length = short_to_bytes(len(raw))
+    unpacked = data_factory(padded_name, raw_length, raw)
+    return pack_sysex(unpacked, global_channel=global_channel)
+
+
+def sections_to_sysex_patch(
+    buttons: list[dict[str, int | str]],
+    cvs: list[dict[str, int | str]],
+    data_wheel: list[dict[str, int | str]],
+    faders: list[dict[str, int | str]],
     file_version: str,
     global_channel: int,
     name: str,
-    setup: list[Record],
-    verbose: bool = False,
-) -> Patch:
+    setup: list[dict[str, int | str]],
+) -> SysexPatch:
     if file_version != "1.0.0":
         msg = f"Unsupported file version: {file_version}"
         raise ValueError(msg)
 
-    sections = [
-        (Section.FADERS, name_to_fader_id, faders),
-        (Section.CVS, name_to_fader_id, cvs),
-        (Section.BUTTONS, name_to_button_id, buttons),
-        (Section.DATA_WHEEL, name_to_data_wheel_id, data_wheel),
-        (Section.SETUP, name_to_setup_id, setup),
-    ]
-
-    raw = b""
-    for record_type, lookup, section in sections:
-        for item in section:
-            record = lookup[item["type"]].pack(item, record_type)
-            if verbose:
-                print(record)
-            raw += record.rebundle()
-    unpacked = data_factory(
-        bytes(name.encode()).ljust(16),
-        short_to_bytes(len(raw)),
-        raw,
-    )
-    if verbose:
-        print("UNPACKED:", unpacked)
-    packed = pack_sysex(unpacked, global_channel=global_channel)
-    return Patch(packed)
+    raw = flatten_section(Section.FADERS, faders)
+    raw += flatten_section(Section.CVS, cvs)
+    raw += flatten_section(Section.BUTTONS, buttons)
+    raw += flatten_section(Section.DATA_WHEEL, data_wheel)
+    raw += flatten_section(Section.SETUP, setup)
+    return SysexPatch(raw_to_sysex(name, global_channel, raw))
