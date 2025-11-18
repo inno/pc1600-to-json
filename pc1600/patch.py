@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import enum
 import json
-from dataclasses import dataclass, field
 from pc1600.data import Data
 from pc1600.record import (
     Record,
@@ -73,13 +72,13 @@ def flatten_section(
     return raw
 
 
-@dataclass
 class SysexPatch:
     raw_data: bytes
-    data: Data = field(default_factory=Data)
-    _records: list[Record] = field(default_factory=list)
+    data: Data
+    _records: list[Record]
 
-    def __post_init__(self) -> None:
+    def __init__(self, raw_data: bytes) -> None:
+        self.raw_data = raw_data
         self.data = Data(unpack_sysex(self.raw_data))
         # Exclude name and size fields
         if len(self.data) - (16 + 2) != self.data_size:
